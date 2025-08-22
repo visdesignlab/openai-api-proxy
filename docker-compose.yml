@@ -1,0 +1,8 @@
+# docker compose file to run the openai-api-proxy
+services:
+  openai-api-proxy:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
