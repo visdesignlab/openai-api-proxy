@@ -78,7 +78,7 @@ app.post("/v1/responses", async (req, res) => {
   }
 });
 
-
+// Forward /v1/files to OpenAI Files API for file uploads
 const upload = multer();
 
 app.post("/v1/files", upload.single("file"), async (req, res) => {
