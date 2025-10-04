@@ -90,7 +90,7 @@ app.post("/v1/files", upload.single("file"), async (req, res) => {
     const response = await fetch("https://api.openai.com/v1/files", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         ...form.getHeaders(),
       },
       body: form,
