@@ -3,6 +3,10 @@ import express from 'express';
 import fetch from 'node-fetch';
 import cors from 'cors';
 
+// For file uploads
+import multer from "multer";
+import FormData from "form-data";
+
 const app = express();
 const port = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -42,6 +46,61 @@ app.post('/v1/chat/completions', async (req, res) => {
   } catch (error) {
     console.error('Error proxying request to OpenAI API:', error);
     res.status(500).send('Internal Server Error');
+  }
+});
+
+// Forward /v1/responses to OpenAI (supports streaming)
+app.post("/v1/responses", async (req, res) => {
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(req.body),
+    });
+
+    // If client requested stream, forward as SSE
+    if (req.body.stream) {
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+
+      response.body.pipe(res); // <-- just pipe raw stream back
+    } else {
+      const data = await response.json();
+      res.status(response.status).json(data);
+    }
+  } catch (err) {
+    console.error("Proxy error (responses):", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Forward /v1/files to OpenAI Files API for file uploads
+const upload = multer();
+
+app.post("/v1/files", upload.single("file"), async (req, res) => {
+  try {
+    const form = new FormData();
+    form.append("file", req.file.buffer, req.file.originalname);
+    form.append("purpose", req.body.purpose);
+
+    const response = await fetch("https://api.openai.com/v1/files", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        ...form.getHeaders(),
+      },
+      body: form,
+    });
+
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    console.error("File upload error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
