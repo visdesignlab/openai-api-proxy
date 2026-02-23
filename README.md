@@ -3,7 +3,8 @@ A simple proxy server for the OpenAI API using Express.js. This server forwards 
 
 ## Deployment
 You can deploy this server using Docker using the following steps:
-1. Copy the `.env.example` file to `.env` and set your OpenAI API key and CORS origin.
+1. Copy the `.env.example` file to `.env` and set your OpenAI API key and CORS origin(s).  
+   `CORS_ORIGIN` supports comma-separated values (for example: `http://localhost:3000,http://localhost:8080`) or a JSON array string.
 2. Build and run the Docker container using Docker Compose:
     ```bash
     docker compose up -d --build

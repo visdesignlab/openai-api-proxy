@@ -13,6 +13,33 @@ const port = process.env.PORT || 3000;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const CORS_ORIGIN = process.env.CORS_ORIGIN;
 
+function parseCorsOrigins(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (!Array.isArray(parsed)) {
+        throw new Error("CORS_ORIGIN JSON value must be an array of origins");
+      }
+
+      return parsed
+        .map((origin) => String(origin).trim())
+        .filter(Boolean);
+    } catch (error) {
+      throw new Error(`Invalid CORS_ORIGIN JSON array: ${error.message}`);
+    }
+  }
+
+  return trimmed
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 if (!OPENAI_API_KEY) {
   throw new Error('OPENAI_API_KEY environment variable is not set');
 }
@@ -21,8 +48,13 @@ if (!CORS_ORIGIN) {
   throw new Error('CORS_ORIGIN environment variable is not set');
 }
 
+const corsOrigins = parseCorsOrigins(CORS_ORIGIN);
+if (corsOrigins.length === 0) {
+  throw new Error("CORS_ORIGIN does not contain any valid origins");
+}
+
 app.use(cors({
-  origin: [CORS_ORIGIN], // specify allowed origins
+  origin: corsOrigins, // specify allowed origins
 }));
 app.use(express.json());
 
