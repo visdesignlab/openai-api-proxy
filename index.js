@@ -2,6 +2,7 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import cors from 'cors';
+import { pipeline } from 'node:stream';
 
 // For file uploads
 import multer from "multer";
@@ -52,7 +53,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 // Forward /v1/responses to OpenAI (supports streaming)
 app.post("/v1/responses", async (req, res) => {
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const upstream = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -61,20 +62,51 @@ app.post("/v1/responses", async (req, res) => {
       body: JSON.stringify(req.body),
     });
 
-    // If client requested stream, forward as SSE
-    if (req.body.stream) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Connection", "keep-alive");
+    const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    const wantsStream = req.body?.stream === true;
 
-      response.body.pipe(res); // <-- just pipe raw stream back
-    } else {
-      const data = await response.json();
-      res.status(response.status).json(data);
+    if (!upstream.ok) {
+      const errText = await upstream.text();
+      console.error(
+        `[responses] upstream non-OK status=${upstream.status} body_preview=${JSON.stringify(errText.slice(0, 300))}`,
+      );
+      return res.status(upstream.status).type(contentType).send(errText);
     }
+
+    if (wantsStream) {
+      if (!contentType.includes("text/event-stream")) {
+        const body = await upstream.text();
+        return res.status(502).json({
+          error: "Upstream did not return SSE",
+          contentType,
+          body,
+        });
+      }
+
+      res.status(200);
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders?.();
+
+      if (!upstream.body) {
+        return res.end();
+      }
+
+      pipeline(upstream.body, res, (err) => {
+        if (err) {
+          console.error("SSE pipeline error:", err);
+        }
+      });
+      return;
+    }
+
+    const data = await upstream.text();
+    return res.status(upstream.status).type(contentType).send(data);
   } catch (err) {
     console.error("Proxy error (responses):", err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err?.message || "Internal Server Error" });
   }
 });
 
